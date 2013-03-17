@@ -66,46 +66,60 @@ object SQLInterpolation {
 
             val expectedType = s.typeSignature
             val fieldName = s.name.encoded.trim
-            val columnLabel = resultName.field(fieldName)
+            val columnName = SQLSyntaxProvider.toSnakeCase(fieldName, nameConverters)
 
-            if (expectedType <:< typeOf[Option[_]]) {
-              val nullableValue = rs.any(columnLabel)
-              if (nullableValue == null) None
-              else {
-                // TODO convert to type
-                Some(nullableValue)
+            if (!columns.contains(columnName)) {
+              if (s.asTerm.isParamWithDefault) {
+                // TODO set default value
+                // http://stackoverflow.com/questions/14034142/how-do-i-access-default-parameter-values-via-scala-reflection
+                ???
+              } else {
+                if (expectedType <:< typeOf[Option[_]]) None else null
               }
-            } else if (expectedType =:= typeOf[Int]) rs.int(columnLabel)
-            else if (expectedType =:= typeOf[Long]) rs.long(columnLabel)
-            else if (expectedType =:= typeOf[String]) rs.string(columnLabel)
-            else if (expectedType =:= typeOf[java.util.Date]) rs.date(columnLabel).toJavaUtilDate
-            else if (expectedType =:= typeOf[DateTime]) rs.timestamp(columnLabel).toDateTime
-            else if (expectedType =:= typeOf[LocalDate]) rs.timestamp(columnLabel).toLocalDate
-            else if (expectedType =:= typeOf[Boolean]) rs.boolean(columnLabel)
-            else if (expectedType =:= typeOf[Byte]) rs.byte(columnLabel)
-            else if (expectedType =:= typeOf[Double]) rs.double(columnLabel)
-            else if (expectedType =:= typeOf[Float]) rs.float(columnLabel)
-            else if (expectedType =:= typeOf[Short]) rs.short(columnLabel)
-            else if (expectedType =:= typeOf[BigDecimal]) rs.bigDecimal(columnLabel)
-            else if (expectedType =:= typeOf[LocalDateTime]) rs.timestamp(columnLabel).toLocalDateTime
-            else if (expectedType =:= typeOf[LocalTime]) rs.timestamp(columnLabel).toLocalTime
-            else if (expectedType =:= typeOf[java.sql.Array]) rs.array(columnLabel)
-            else if (expectedType =:= typeOf[java.sql.Blob]) rs.blob(columnLabel)
-            else if (expectedType =:= typeOf[java.sql.Clob]) rs.clob(columnLabel)
-            else if (expectedType =:= typeOf[java.sql.Date]) rs.date(columnLabel)
-            else if (expectedType =:= typeOf[java.sql.NClob]) rs.nClob(columnLabel)
-            else if (expectedType =:= typeOf[java.sql.Ref]) rs.ref(columnLabel)
-            else if (expectedType =:= typeOf[java.sql.RowId]) rs.rowId(columnLabel)
-            else if (expectedType =:= typeOf[java.sql.SQLXML]) rs.sqlXml(columnLabel)
-            else if (expectedType =:= typeOf[java.sql.Time]) rs.time(columnLabel)
-            else if (expectedType =:= typeOf[java.sql.Timestamp]) rs.timestamp(columnLabel)
-            else if (expectedType =:= typeOf[java.io.InputStream]) rs.binaryStream(columnLabel)
-            else if (expectedType =:= typeOf[java.net.URL]) rs.url(columnLabel)
-            else if (expectedType =:= typeOf[Array[Byte]]) rs.bytes(columnLabel)
-            else {
-              val value: Any = rs.any(columnLabel)
-              // TODO convert to type
-              value
+            } else {
+
+              val columnLabel = resultName.field(fieldName)
+
+              // TODO re-write as pattern matching
+              if (expectedType <:< typeOf[Option[_]]) {
+                val nullableValue = rs.any(columnLabel)
+                if (nullableValue == null) None
+                else {
+                  // TODO convert to type
+                  Some(nullableValue)
+                }
+              } else if (expectedType =:= typeOf[Int]) rs.int(columnLabel)
+              else if (expectedType =:= typeOf[Long]) rs.long(columnLabel)
+              else if (expectedType =:= typeOf[String]) rs.string(columnLabel)
+              else if (expectedType =:= typeOf[java.util.Date]) rs.date(columnLabel).toJavaUtilDate
+              else if (expectedType =:= typeOf[DateTime]) rs.timestamp(columnLabel).toDateTime
+              else if (expectedType =:= typeOf[LocalDate]) rs.timestamp(columnLabel).toLocalDate
+              else if (expectedType =:= typeOf[Boolean]) rs.boolean(columnLabel)
+              else if (expectedType =:= typeOf[Byte]) rs.byte(columnLabel)
+              else if (expectedType =:= typeOf[Double]) rs.double(columnLabel)
+              else if (expectedType =:= typeOf[Float]) rs.float(columnLabel)
+              else if (expectedType =:= typeOf[Short]) rs.short(columnLabel)
+              else if (expectedType =:= typeOf[BigDecimal]) rs.bigDecimal(columnLabel)
+              else if (expectedType =:= typeOf[LocalDateTime]) rs.timestamp(columnLabel).toLocalDateTime
+              else if (expectedType =:= typeOf[LocalTime]) rs.timestamp(columnLabel).toLocalTime
+              else if (expectedType =:= typeOf[java.sql.Array]) rs.array(columnLabel)
+              else if (expectedType =:= typeOf[java.sql.Blob]) rs.blob(columnLabel)
+              else if (expectedType =:= typeOf[java.sql.Clob]) rs.clob(columnLabel)
+              else if (expectedType =:= typeOf[java.sql.Date]) rs.date(columnLabel)
+              else if (expectedType =:= typeOf[java.sql.NClob]) rs.nClob(columnLabel)
+              else if (expectedType =:= typeOf[java.sql.Ref]) rs.ref(columnLabel)
+              else if (expectedType =:= typeOf[java.sql.RowId]) rs.rowId(columnLabel)
+              else if (expectedType =:= typeOf[java.sql.SQLXML]) rs.sqlXml(columnLabel)
+              else if (expectedType =:= typeOf[java.sql.Time]) rs.time(columnLabel)
+              else if (expectedType =:= typeOf[java.sql.Timestamp]) rs.timestamp(columnLabel)
+              else if (expectedType =:= typeOf[java.io.InputStream]) rs.binaryStream(columnLabel)
+              else if (expectedType =:= typeOf[java.net.URL]) rs.url(columnLabel)
+              else if (expectedType =:= typeOf[Array[Byte]]) rs.bytes(columnLabel)
+              else {
+                val value: Any = rs.any(columnLabel)
+                // TODO convert to type
+                value
+              }
             }
           }
         }.flatten: _*).asInstanceOf[A]

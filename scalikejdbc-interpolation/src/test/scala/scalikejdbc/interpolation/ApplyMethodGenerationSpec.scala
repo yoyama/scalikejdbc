@@ -6,7 +6,8 @@ import org.scalatest.matchers._
 import scalikejdbc.SQLInterpolation._
 import scalikejdbc._
 
-case class Member(id: Int, firstName: Option[String])
+case class Group(id: Int, groupName: String)
+case class Member(id: Int, firstName: Option[String], groupId: Option[Int], group: Option[Group] /*, dummy: Int = 123*/ )
 object Member extends SQLSyntaxSupport[Member] {
   override val tableName = "applymethodgenerationspec"
 }
@@ -52,6 +53,7 @@ class ApplyMethodGenerationSpec extends FlatSpec with ShouldMatchers with LogSup
     val m = Member.syntax("m")
     val members = sql"select ${m.result.*} from ${Member.as(m)}".map(Member(m.resultName)).list.apply()
     members.size should equal(3)
+    //members.head.dummy should equal(123)
   }
 
 }
