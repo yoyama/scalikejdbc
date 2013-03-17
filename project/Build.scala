@@ -69,6 +69,7 @@ object ScalikeJDBCProjects extends Build {
       resolvers ++= _resolvers,
       libraryDependencies <++= (scalaVersion) { scalaVersion =>
         Seq(
+          "org.scala-lang" %  "scala-reflect"    % scalaVersion  % "compile",
           "org.slf4j"      %  "slf4j-api"        % "1.7.2"       % "compile",
           "ch.qos.logback" %  "logback-classic"  % "1.0.7"       % "test",
           "org.hibernate"  %  "hibernate-core"   % "4.1.9.Final" % "test",

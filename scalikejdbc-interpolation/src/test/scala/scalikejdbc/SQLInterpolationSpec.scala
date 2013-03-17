@@ -3,15 +3,10 @@ package scalikejdbc
 import org.scalatest._
 import org.scalatest.matchers._
 
-import org.joda.time._
-import scalikejdbc.SQLInterpolation._
-
-class HibernateSQLFormatter extends SQLFormatter {
-  private val formatter = new org.hibernate.engine.jdbc.internal.BasicFormatterImpl()
-  def format(sql: String) = formatter.format(sql)
-}
-
 class SQLInterpolationSpec extends FlatSpec with ShouldMatchers {
+
+  import org.joda.time._
+  import scalikejdbc.SQLInterpolation._
 
   behavior of "SQLInterpolation"
 
@@ -23,7 +18,7 @@ class SQLInterpolationSpec extends FlatSpec with ShouldMatchers {
   val password = props.getProperty("password")
 
   Class.forName(driverClassName)
-  val poolSettings = new ConnectionPoolSettings(initialSize = 50, maxSize = 50)
+  val poolSettings = new ConnectionPoolSettings(initialSize = 50, maxSize = 50, validationQuery = null)
   ConnectionPool.singleton(url, user, password, poolSettings)
 
   GlobalSettings.sqlFormatter = SQLFormatterSettings("scalikejdbc.HibernateSQLFormatter")

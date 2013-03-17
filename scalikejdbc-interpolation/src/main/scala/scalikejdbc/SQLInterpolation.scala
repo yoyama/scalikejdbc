@@ -9,6 +9,9 @@ import scala.language.dynamics
  */
 object SQLInterpolation {
 
+  import scala.reflect.runtime.universe._
+  import scala.reflect._
+
   private object LastParameter
 
   /**
@@ -50,6 +53,25 @@ object SQLInterpolation {
       if (tableName == provider.tableAliasName) { SQLSyntax(tableName) }
       else { SQLSyntax(tableName + " " + provider.tableAliasName) }
     }
+
+    def apply(resultName: ResultName[A])(rs: WrappedResultSet)(implicit typeTag: TypeTag[A]): A = {
+      typeOf[A].declarations.collectFirst {
+        case m: MethodSymbol if m.isPrimaryConstructor => m
+      }.map { const =>
+        val classMirror = typeTag.mirror.reflectClass(typeOf[A].typeSymbol.asClass)
+        val constructorMirror = classMirror.reflectConstructor(const)
+        constructorMirror.apply(const.paramss.map { symbols =>
+          symbols.map { s =>
+            // TODO handling Option, single argument class
+            rs.any(resultName.field(s.name.encoded.trim))
+          }
+        }.flatten: _*).asInstanceOf[A]
+      }.getOrElse {
+        // TODO skipping relations or fields that have default value.
+        throw new IllegalArgumentException("TODO")
+      }
+    }
+
   }
 
   /**
