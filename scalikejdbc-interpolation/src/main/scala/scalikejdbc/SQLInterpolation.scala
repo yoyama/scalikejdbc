@@ -62,13 +62,14 @@ object SQLInterpolation {
         val constructorMirror = classMirror.reflectConstructor(const)
         constructorMirror.apply(const.paramss.map { symbols =>
           symbols.map { s =>
-            // TODO handling Option, single argument class
+            // TODO pattern matching with expected type, Option, single argument class
+            // TODO skipping relations or fields that have default value.
             rs.any(resultName.field(s.name.encoded.trim))
           }
         }.flatten: _*).asInstanceOf[A]
       }.getOrElse {
-        // TODO skipping relations or fields that have default value.
-        throw new IllegalArgumentException("TODO")
+        // TODO primary constructor not found
+        ???
       }
     }
 

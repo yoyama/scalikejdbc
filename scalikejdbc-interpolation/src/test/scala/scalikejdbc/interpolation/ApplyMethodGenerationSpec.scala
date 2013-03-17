@@ -6,7 +6,7 @@ import org.scalatest.matchers._
 import scalikejdbc.SQLInterpolation._
 import scalikejdbc._
 
-case class Member(id: Int, name: String)
+case class Member(id: Int, firstName: String)
 object Member extends SQLSyntaxSupport[Member] {
   override val tableName = "applymethodgenerationspec"
 }
@@ -32,7 +32,8 @@ class ApplyMethodGenerationSpec extends FlatSpec with ShouldMatchers with LogSup
 
   val tableName = sqls"applymethodgenerationspec"
   try {
-    sql"create table ${tableName} (id int not null, name varchar(256), group_id int)".execute.apply()
+    sql"drop table ${tableName} if exists".execute.apply()
+    sql"create table ${tableName} (id int not null, first_name varchar(256), group_id int)".execute.apply()
   } catch {
     case e: Exception =>
       log.info(s"member table is already created (${e.getMessage})")
