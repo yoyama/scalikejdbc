@@ -6,7 +6,7 @@ import org.scalatest.matchers._
 import scalikejdbc.SQLInterpolation._
 import scalikejdbc._
 
-case class Member(id: Int, firstName: String)
+case class Member(id: Int, firstName: Option[String])
 object Member extends SQLSyntaxSupport[Member] {
   override val tableName = "applymethodgenerationspec"
 }
