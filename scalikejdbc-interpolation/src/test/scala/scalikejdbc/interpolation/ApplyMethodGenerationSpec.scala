@@ -3,24 +3,22 @@ package scalikejdbc.interpolation
 import org.scalatest._
 import org.scalatest.matchers._
 
-import scalikejdbc.SQLInterpolation._
 import scalikejdbc._
+import scalikejdbc.SQLInterpolation._
 
 case class Name(name: String)
 case class Group(id: Int, groupName: String)
 case class Member(id: Int, firstName: Option[Name], lastName: Name, groupId: Option[Int], group: Option[Group] /*, dummy: Int = 123*/ )
 object Member extends SQLSyntaxSupport[Member] {
   override val tableName = "applymethodgenerationspec"
-  override val typeConverters = Seq(new TypeConverter[String, Name] {
-    def convert(name: String): Name = Name(name)
-  })
+  override val typeConverters = Seq((name: String) => Name(name))
 }
 
 class ApplyMethodGenerationSpec extends FlatSpec with ShouldMatchers with LogSupport {
 
-  behavior of "ApplyMethodGeneration"
-
   import scalikejdbc.SQLInterpolation._
+
+  behavior of "ApplyMethodGeneration"
 
   val props = new java.util.Properties
   using(new java.io.FileInputStream("scalikejdbc-library/src/test/resources/jdbc.properties")) { in => props.load(in) }
