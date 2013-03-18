@@ -45,7 +45,6 @@ object SQLInterpolation {
       def inputType(implicit tag: TypeTag[A]): Type = tag.tpe
       def outputType(implicit tag: TypeTag[R]) = tag.tpe
     }
-
     implicit def function1ToTypeConverter[A, R](f: Function1[A, R]) = new TypeConverter[A, R] { def apply(a: A) = f.apply(a) }
 
     def typeConverters: Seq[Function1[_, _]] = Nil
@@ -83,15 +82,22 @@ object SQLInterpolation {
                 // http://stackoverflow.com/questions/14034142/how-do-i-access-default-parameter-values-via-scala-reflection
                 ???
               } else {
-                if (expectedType <:< typeOf[Option[_]]) None else null
+                if (expectedType <:< typeOf[Option[_]]) None
+                else throw new IllegalStateException(s"Failed to map ResultSet values because ${fieldName} is found and doesn't have default value.")
               }
             } else {
               val columnLabel = resultName.field(fieldName)
               if (expectedType <:< typeOf[Option[_]]) {
+                val paramType = firstParamType(expectedType)
+                typeConverters.find(c => c.inputType =:= paramType).map { c =>
+                  extractValue(expectedType, rs, columnLabel).map(v => applyTypeConverter(c, v))
+                }.getOrElse {
+                  extractValue(expectedType, rs, columnLabel)
+                }
                 extractValue(firstParamType(expectedType), rs, columnName)
               } else {
                 typeConverters.find(c => c.inputType =:= expectedType).map { c =>
-                  extractValue(c.inputType, rs, columnLabel).map(v => applyTypeConverter(c, v)).getOrElse(null)
+                  extractValue(expectedType, rs, columnLabel).map(v => applyTypeConverter(c, v)).getOrElse(null)
                 }.getOrElse {
                   extractValue(expectedType, rs, columnLabel).getOrElse(null)
                 }

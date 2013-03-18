@@ -53,8 +53,12 @@ class ApplyMethodGenerationSpec extends FlatSpec with ShouldMatchers with LogSup
 
   it should "be available" in {
     val m = Member.syntax("m")
-    val members = sql"select ${m.result.*} from ${Member.as(m)}".map(Member(m.resultName)).list.apply()
+    val members = sql"select ${m.result.*} from ${Member.as(m)} order by ${m.id}".map(Member(m.resultName)).list.apply()
     members.size should equal(3)
+    members.head.id should equal(1)
+    // TODO not working...
+    members.head.firstName should equal(Some(Name("Alice")))
+    members.head.lastName should equal(Name("Wonderland"))
     //members.head.dummy should equal(123)
   }
 
