@@ -24,13 +24,6 @@ object SQLInterpolation {
 
   private[scalikejdbc] val SQLSyntaxSupportLoadedColumns = new scala.collection.concurrent.TrieMap[String, Seq[String]]()
 
-  trait TypeConverter[A, R] extends Function1[A, R] {
-    def inputType(implicit tag: TypeTag[A]): Type = tag.tpe
-    def outputType(implicit tag: TypeTag[R]) = tag.tpe
-  }
-
-  implicit def function1ToTypeConverter[A, R](f: Function1[A, R]) = new TypeConverter[A, R] { def apply(a: A) = f.apply(a) }
-
   /**
    * SQLSyntax support utilities
    */
@@ -47,6 +40,14 @@ object SQLInterpolation {
     def useShortenedResultName: Boolean = true
     def delimiterForResultName = if (forceUpperCase) "_ON_" else "_on_"
     def nameConverters: Map[String, String] = Map()
+
+    trait TypeConverter[A, R] extends Function1[A, R] {
+      def inputType(implicit tag: TypeTag[A]): Type = tag.tpe
+      def outputType(implicit tag: TypeTag[R]) = tag.tpe
+    }
+
+    implicit def function1ToTypeConverter[A, R](f: Function1[A, R]) = new TypeConverter[A, R] { def apply(a: A) = f.apply(a) }
+
     def typeConverters: Seq[Function1[_, _]] = Nil
 
     def syntax = {
