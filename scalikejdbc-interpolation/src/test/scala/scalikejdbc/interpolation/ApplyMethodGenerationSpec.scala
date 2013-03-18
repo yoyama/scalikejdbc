@@ -6,10 +6,14 @@ import org.scalatest.matchers._
 import scalikejdbc.SQLInterpolation._
 import scalikejdbc._
 
+case class Name(name: String)
 case class Group(id: Int, groupName: String)
-case class Member(id: Int, firstName: Option[String], groupId: Option[Int], group: Option[Group] /*, dummy: Int = 123*/ )
+case class Member(id: Int, firstName: Option[Name], lastName: Name, groupId: Option[Int], group: Option[Group] /*, dummy: Int = 123*/ )
 object Member extends SQLSyntaxSupport[Member] {
   override val tableName = "applymethodgenerationspec"
+  override val typeConverters = Seq(new TypeConverter[String, Name] {
+    def convert(name: String): Name = Name(name)
+  })
 }
 
 class ApplyMethodGenerationSpec extends FlatSpec with ShouldMatchers with LogSupport {
@@ -34,16 +38,16 @@ class ApplyMethodGenerationSpec extends FlatSpec with ShouldMatchers with LogSup
   val tableName = sqls"applymethodgenerationspec"
   try {
     sql"drop table ${tableName} if exists".execute.apply()
-    sql"create table ${tableName} (id int not null, first_name varchar(256), group_id int)".execute.apply()
+    sql"create table ${tableName} (id int not null, first_name varchar(256), last_name varchar(256), group_id int)".execute.apply()
   } catch {
     case e: Exception =>
       log.info(s"member table is already created (${e.getMessage})")
   }
   try {
     sql"delete from ${tableName}".execute.apply()
-    Seq((1, Some("foo"), None), (2, Some("bar"), None), (3, Some("baz"), Some(1))) foreach {
-      case (id, name, groupId) => sql"insert into ${tableName} values (${id}, ${name}, ${groupId})".update.apply()
-    }
+    sql"insert into ${tableName} values (1, 'Alice', 'Wonderland', null)".update.apply()
+    sql"insert into ${tableName} values (2, 'Bob', 'Marley', null)".update.apply()
+    sql"insert into ${tableName} values (3, 'Chris', 'Birchall', null)".update.apply()
   } catch {
     case e: Exception =>
       log.info(s"member records already exists (${e.getMessage})")

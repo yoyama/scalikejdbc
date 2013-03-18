@@ -24,6 +24,12 @@ object SQLInterpolation {
 
   private[scalikejdbc] val SQLSyntaxSupportLoadedColumns = new scala.collection.concurrent.TrieMap[String, Seq[String]]()
 
+  trait TypeConverter[A, R] {
+    def inputType(implicit tag: TypeTag[A]): Type = tag.tpe
+    def outputType(implicit tag: TypeTag[R]) = tag.tpe
+    def convert(a: A): R
+  }
+
   /**
    * SQLSyntax support utilities
    */
@@ -40,6 +46,7 @@ object SQLInterpolation {
     def useShortenedResultName: Boolean = true
     def delimiterForResultName = if (forceUpperCase) "_ON_" else "_on_"
     def nameConverters: Map[String, String] = Map()
+    def typeConverters: Seq[TypeConverter[_, _]] = Nil
 
     def syntax = {
       val _name = if (forceUpperCase) tableName.toUpperCase else tableName
@@ -61,8 +68,8 @@ object SQLInterpolation {
       }.map { const =>
         val classMirror = typeTag.mirror.reflectClass(typeOf[A].typeSymbol.asClass)
         val constructorMirror = classMirror.reflectConstructor(const)
-        constructorMirror.apply(const.paramss.map { symbols: List[_root_.scala.reflect.runtime.universe.type#Symbol] =>
-          symbols.map { s: _root_.scala.reflect.runtime.universe.type#Symbol =>
+        constructorMirror.apply(const.paramss.map { symbols: List[Symbol] =>
+          symbols.map { s: Symbol =>
 
             val expectedType = s.typeSignature
             val fieldName = s.name.encoded.trim
@@ -77,48 +84,15 @@ object SQLInterpolation {
                 if (expectedType <:< typeOf[Option[_]]) None else null
               }
             } else {
-
               val columnLabel = resultName.field(fieldName)
-
-              // TODO re-write as pattern matching
               if (expectedType <:< typeOf[Option[_]]) {
-                val nullableValue = rs.any(columnLabel)
-                if (nullableValue == null) None
-                else {
-                  // TODO convert to type
-                  Some(nullableValue)
+                extractValue(firstParamType(expectedType), rs, columnName)
+              } else {
+                typeConverters.find(c => c.inputType =:= expectedType).map { c =>
+                  extractValue(c.inputType, rs, columnLabel).map(v => applyTypeConverter(c, v)).getOrElse(null)
+                }.getOrElse {
+                  extractValue(expectedType, rs, columnLabel).getOrElse(null)
                 }
-              } else if (expectedType =:= typeOf[Int]) rs.int(columnLabel)
-              else if (expectedType =:= typeOf[Long]) rs.long(columnLabel)
-              else if (expectedType =:= typeOf[String]) rs.string(columnLabel)
-              else if (expectedType =:= typeOf[java.util.Date]) rs.date(columnLabel).toJavaUtilDate
-              else if (expectedType =:= typeOf[DateTime]) rs.timestamp(columnLabel).toDateTime
-              else if (expectedType =:= typeOf[LocalDate]) rs.timestamp(columnLabel).toLocalDate
-              else if (expectedType =:= typeOf[Boolean]) rs.boolean(columnLabel)
-              else if (expectedType =:= typeOf[Byte]) rs.byte(columnLabel)
-              else if (expectedType =:= typeOf[Double]) rs.double(columnLabel)
-              else if (expectedType =:= typeOf[Float]) rs.float(columnLabel)
-              else if (expectedType =:= typeOf[Short]) rs.short(columnLabel)
-              else if (expectedType =:= typeOf[BigDecimal]) rs.bigDecimal(columnLabel)
-              else if (expectedType =:= typeOf[LocalDateTime]) rs.timestamp(columnLabel).toLocalDateTime
-              else if (expectedType =:= typeOf[LocalTime]) rs.timestamp(columnLabel).toLocalTime
-              else if (expectedType =:= typeOf[java.sql.Array]) rs.array(columnLabel)
-              else if (expectedType =:= typeOf[java.sql.Blob]) rs.blob(columnLabel)
-              else if (expectedType =:= typeOf[java.sql.Clob]) rs.clob(columnLabel)
-              else if (expectedType =:= typeOf[java.sql.Date]) rs.date(columnLabel)
-              else if (expectedType =:= typeOf[java.sql.NClob]) rs.nClob(columnLabel)
-              else if (expectedType =:= typeOf[java.sql.Ref]) rs.ref(columnLabel)
-              else if (expectedType =:= typeOf[java.sql.RowId]) rs.rowId(columnLabel)
-              else if (expectedType =:= typeOf[java.sql.SQLXML]) rs.sqlXml(columnLabel)
-              else if (expectedType =:= typeOf[java.sql.Time]) rs.time(columnLabel)
-              else if (expectedType =:= typeOf[java.sql.Timestamp]) rs.timestamp(columnLabel)
-              else if (expectedType =:= typeOf[java.io.InputStream]) rs.binaryStream(columnLabel)
-              else if (expectedType =:= typeOf[java.net.URL]) rs.url(columnLabel)
-              else if (expectedType =:= typeOf[Array[Byte]]) rs.bytes(columnLabel)
-              else {
-                val value: Any = rs.any(columnLabel)
-                // TODO convert to type
-                value
               }
             }
           }
@@ -129,6 +103,42 @@ object SQLInterpolation {
         ???
       }
     }
+
+    private[this] def applyTypeConverter[A, R](converter: TypeConverter[A, R], v: Any): R = {
+      converter.convert(v.asInstanceOf[A])
+    }
+
+    private[this] def firstParamType(t: Type): Type = t.typeSymbol.asClass.typeParams.head.typeSignature
+
+    private[this] def extractValue(expectedType: Type, rs: WrappedResultSet, label: String): Option[_] = expectedType match {
+        case t if t =:= typeOf[Int] => rs.intOpt(label)
+        case t if t =:= typeOf[Long] => rs.longOpt(label)
+        case t if t =:= typeOf[String] => rs.stringOpt(label)
+        case t if t =:= typeOf[Boolean] => rs.booleanOpt(label)
+        case t if t =:= typeOf[DateTime] => rs.timestampOpt(label).map(_.toDateTime)
+        case t if t =:= typeOf[LocalDate] => rs.timestampOpt(label).map(_.toLocalDate)
+        case t if t =:= typeOf[LocalDateTime] => rs.timestampOpt(label).map(_.toLocalDateTime)
+        case t if t =:= typeOf[LocalTime] => rs.timestampOpt(label).map(_.toLocalTime)
+        case t if t =:= typeOf[java.util.Date] => rs.timestampOpt(label).map(_.toJavaUtilDate)
+        case t if t =:= typeOf[BigDecimal] => rs.bigDecimalOpt(label)
+        case t if t =:= typeOf[Double] => rs.doubleOpt(label)
+        case t if t =:= typeOf[Float] => rs.floatOpt(label)
+        case t if t =:= typeOf[Short] => rs.shortOpt(label)
+        case t if t =:= typeOf[Byte] => rs.byteOpt(label)
+        case t if t =:= typeOf[java.sql.Array] => rs.arrayOpt(label)
+        case t if t =:= typeOf[java.sql.Blob] => rs.blobOpt(label)
+        case t if t =:= typeOf[java.sql.Clob] => rs.clobOpt(label)
+        case t if t =:= typeOf[java.sql.Date] => rs.dateOpt(label)
+        case t if t =:= typeOf[java.sql.NClob] => rs.nClobOpt(label)
+        case t if t =:= typeOf[java.sql.Ref] => rs.refOpt(label)
+        case t if t =:= typeOf[java.sql.SQLXML] => rs.sqlXmlOpt(label)
+        case t if t =:= typeOf[java.sql.Time] => rs.timeOpt(label)
+        case t if t =:= typeOf[java.sql.Timestamp] => rs.timestampOpt(label)
+        case t if t =:= typeOf[java.io.InputStream] => rs.binaryStreamOpt(label)
+        case t if t =:= typeOf[java.net.URL] => rs.urlOpt(label)
+        case t if t =:= typeOf[Array[Byte]] => rs.bytesOpt(label)
+        case _ => None
+      }
 
   }
 
