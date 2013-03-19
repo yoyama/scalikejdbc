@@ -68,33 +68,35 @@ object SQLInterpolation {
       }.map { const =>
         val classMirror = typeTag.mirror.reflectClass(entityType.typeSymbol.asClass)
         val constructorMirror = classMirror.reflectConstructor(const)
-        constructorMirror.apply(const.paramss.map { symbols: List[Symbol] =>
-          symbols.map { s: Symbol =>
+        try {
+          constructorMirror.apply(const.paramss.map { symbols: List[Symbol] =>
+            symbols.map { s: Symbol =>
+              val expectedType = s.typeSignature
+              val fieldName = s.name.encoded.trim
+              val columnName = SQLSyntaxProvider.toSnakeCase(fieldName, nameConverters)
 
-            val expectedType = s.typeSignature
-            val fieldName = s.name.encoded.trim
-            val columnName = SQLSyntaxProvider.toSnakeCase(fieldName, nameConverters)
-
-            if (!columns.contains(columnName)) {
-              if (s.asTerm.isParamWithDefault) {
-                // TODO set default value
-                // http://stackoverflow.com/questions/14034142/how-do-i-access-default-parameter-values-via-scala-reflection
-                ???
+              if (!columns.contains(columnName)) {
+                if (s.asTerm.isParamWithDefault) {
+                  if (expectedType <:< typeOf[Option[_]]) None
+                  else ??? // TODO set default value
+                } else {
+                  if (expectedType <:< typeOf[Option[_]]) None
+                  else throw new IllegalStateException(s"'${fieldName}' not found in (${columns.mkString(",")}) and '${fieldName}' has no default value.")
+                }
               } else {
-                if (expectedType <:< typeOf[Option[_]]) None
-                else throw new IllegalStateException(s"'${fieldName}' not found in (${columns.mkString(",")}) and '${fieldName}' has no default value.")
+                val maybeFoundValue = extractValue(expectedType, rs, resultName.field(fieldName)).map {
+                  v => typeConverter.orElse(asIsConverter).apply((fieldName, v))
+                }
+                if (expectedType <:< typeOf[Option[_]]) maybeFoundValue else maybeFoundValue.getOrElse(null)
               }
-            } else {
-              val maybeFoundValue = extractValue(expectedType, rs, resultName.field(fieldName)).map {
-                v => typeConverter.orElse(asIsConverter).apply((fieldName, v))
-              }
-              if (expectedType <:< typeOf[Option[_]]) maybeFoundValue else maybeFoundValue.getOrElse(null)
             }
-          }
-        }.flatten: _*).asInstanceOf[A]
-
+          }.flatten: _*).asInstanceOf[A]
+        } catch {
+          case e: IllegalArgumentException =>
+            throw new IllegalStateException(s"Failed to instantiate [${entityType}]. (Reason: ${e.getMessage})", e)
+        }
       }.getOrElse {
-        throw new IllegalStateException(s"No primary constructor found for ${entityType}")
+        throw new IllegalStateException(s"No primary constructor found for ${entityType}.")
       }
     }
 
