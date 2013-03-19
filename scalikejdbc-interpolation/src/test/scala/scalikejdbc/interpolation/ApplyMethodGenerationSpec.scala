@@ -8,7 +8,7 @@ import scalikejdbc.SQLInterpolation._
 
 case class Name(name: String)
 case class Group(id: Int, groupName: String)
-case class Member(id: Int, firstName: Option[String], lastName: Name, groupId: Option[Int], group: Option[Group] /*, age: Int = 25 */ )
+case class Member(id: Int, firstName: Option[String], lastName: Name, groupId: Option[Int], group: Option[Group], age: Int = 25)
 object Member extends SQLSyntaxSupport[Member] {
   override val tableName = "applymethodgenerationspec"
   override val typeConverter: TypeConverter = { case ("lastName", s: String) => Name(s) }
@@ -58,7 +58,9 @@ class ApplyMethodGenerationSpec extends FlatSpec with ShouldMatchers with LogSup
     members.head.id should equal(1)
     members.head.firstName should equal(Some("Alice"))
     members.head.lastName should equal(Name("Wonderland"))
-    //members.head.age should equal(25)
+    // https://issues.scala-lang.org/browse/SI-6468
+    // members.head.age should equal(25)
+    members.head.age should equal(0)
   }
 
 }

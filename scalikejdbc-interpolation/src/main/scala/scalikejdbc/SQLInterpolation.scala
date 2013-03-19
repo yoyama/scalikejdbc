@@ -61,7 +61,7 @@ object SQLInterpolation {
       else { SQLSyntax(tableName + " " + provider.tableAliasName) }
     }
 
-    def apply(resultName: ResultName[A])(rs: WrappedResultSet)(implicit typeTag: TypeTag[A], classTag: ClassTag[A]): A = {
+    def apply(resultName: ResultName[A])(rs: WrappedResultSet)(implicit typeTag: TypeTag[A]): A = {
       val entityType = typeTag.tpe
       entityType.declarations.collectFirst {
         case m: MethodSymbol if m.isPrimaryConstructor => m
@@ -70,25 +70,26 @@ object SQLInterpolation {
         val constructorMirror = classMirror.reflectConstructor(const)
         try {
           constructorMirror.apply(const.paramss.map { symbols: List[Symbol] =>
-            symbols.map { s: Symbol =>
-              val expectedType = s.typeSignature
-              val fieldName = s.name.encoded.trim
-              val columnName = SQLSyntaxProvider.toSnakeCase(fieldName, nameConverters)
+            symbols.zipWithIndex.map {
+              case (s: Symbol, i: Int) =>
+                val expectedType = s.typeSignature
+                val fieldName = s.name.encoded.trim
+                val columnName = SQLSyntaxProvider.toSnakeCase(fieldName, nameConverters)
 
-              if (!columns.contains(columnName)) {
-                if (s.asTerm.isParamWithDefault) {
-                  if (expectedType <:< typeOf[Option[_]]) None
-                  else ??? // TODO set default value
+                if (!columns.contains(columnName)) {
+                  if (s.asTerm.isParamWithDefault) {
+                    if (expectedType <:< typeOf[Option[_]]) None
+                    else defaultValue(s) // cannot retrieve the real default value because of Scala 2.10 reflection API limitation
+                  } else {
+                    if (expectedType <:< typeOf[Option[_]]) None
+                    else throw new IllegalStateException(s"'${fieldName}' not found in (${columns.mkString(",")}) and '${fieldName}' has no default value.")
+                  }
                 } else {
-                  if (expectedType <:< typeOf[Option[_]]) None
-                  else throw new IllegalStateException(s"'${fieldName}' not found in (${columns.mkString(",")}) and '${fieldName}' has no default value.")
+                  val maybeFoundValue = extractValue(expectedType, rs, resultName.field(fieldName)).map {
+                    v => typeConverter.orElse(asIsConverter).apply((fieldName, v))
+                  }
+                  if (expectedType <:< typeOf[Option[_]]) maybeFoundValue else maybeFoundValue.getOrElse(null)
                 }
-              } else {
-                val maybeFoundValue = extractValue(expectedType, rs, resultName.field(fieldName)).map {
-                  v => typeConverter.orElse(asIsConverter).apply((fieldName, v))
-                }
-                if (expectedType <:< typeOf[Option[_]]) maybeFoundValue else maybeFoundValue.getOrElse(null)
-              }
             }
           }.flatten: _*).asInstanceOf[A]
         } catch {
@@ -98,6 +99,17 @@ object SQLInterpolation {
       }.getOrElse {
         throw new IllegalStateException(s"No primary constructor found for ${entityType}.")
       }
+    }
+
+    private[this] def defaultValue(p: Symbol): Any = p.typeSignature match {
+      case t if t =:= typeOf[Boolean] => false
+      case t if t =:= typeOf[Byte] => 0
+      case t if t =:= typeOf[Int] => 0
+      case t if t =:= typeOf[Double] => 0.0D
+      case t if t =:= typeOf[Float] => 0.0F
+      case t if t =:= typeOf[Long] => 0L
+      case t if t =:= typeOf[Short] => 0
+      case _ => null
     }
 
     private[this] def extractValue(expectedType: Type, rs: WrappedResultSet, label: String): Option[_] = expectedType match {
