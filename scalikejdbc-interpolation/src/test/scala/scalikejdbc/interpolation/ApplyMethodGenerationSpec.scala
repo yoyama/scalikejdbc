@@ -8,10 +8,10 @@ import scalikejdbc.SQLInterpolation._
 
 case class Name(name: String)
 case class Group(id: Int, groupName: String)
-case class Member(id: Int, firstName: Option[Name], lastName: Name, groupId: Option[Int], group: Option[Group] /*, dummy: Int = 123*/ )
+case class Member(id: Int, firstName: Option[String], lastName: Name, groupId: Option[Int], group: Option[Group] /*, age: Int = 25 */ )
 object Member extends SQLSyntaxSupport[Member] {
   override val tableName = "applymethodgenerationspec"
-  override val typeConverters = Seq((name: String) => Name(name))
+  override val typeConverter: TypeConverter = { case ("lastName", s: String) => Name(s) }
 }
 
 class ApplyMethodGenerationSpec extends FlatSpec with ShouldMatchers with LogSupport {
@@ -53,13 +53,12 @@ class ApplyMethodGenerationSpec extends FlatSpec with ShouldMatchers with LogSup
 
   it should "be available" in {
     val m = Member.syntax("m")
-    val members = sql"select ${m.result.*} from ${Member.as(m)} order by ${m.id}".map(Member(m.resultName)).list.apply()
+    val members = sql"select ${m.result.*} from ${Member as m} order by ${m.id}".map(Member(m.resultName)).list.apply()
     members.size should equal(3)
     members.head.id should equal(1)
-    // TODO not working...
-    members.head.firstName should equal(Some(Name("Alice")))
+    members.head.firstName should equal(Some("Alice"))
     members.head.lastName should equal(Name("Wonderland"))
-    //members.head.dummy should equal(123)
+    //members.head.age should equal(25)
   }
 
 }
