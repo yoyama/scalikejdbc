@@ -348,6 +348,17 @@ class SQLInterpolationSpec extends FlatSpec with ShouldMatchers {
             issue.map(i => i.id) should equal(Some(1))
           }
 
+          {
+            val (i, is) = (Issue.syntax("i"), IssueSummary.syntax("is"))
+            val idCount = sqls"count(${i.resultName.id})"
+            val idSum = sqls"sum(${i.resultName.id})"
+            val summary = sql"""
+              select ${is.result(idCount).count}, ${is.result(idSum).sum} from (select ${i.result.id} from ${Issue.as(i)})
+              """.map(IssueSummary(is.resultName)).single.apply().get
+            summary.count should equal(4)
+            summary.sum should equal(10)
+          }
+
         } finally {
           sql"drop table issue".execute.apply()
           sql"drop table tag".execute.apply()
