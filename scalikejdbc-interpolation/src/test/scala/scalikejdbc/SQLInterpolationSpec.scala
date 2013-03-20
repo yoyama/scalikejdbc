@@ -57,6 +57,12 @@ object Tag extends SQLSyntaxSupport[Tag]
 
 object IssueTag extends SQLSyntaxSupport[Nothing]
 
+case class IssueSummary(count: Long, sum: Long)
+object IssueSummary extends SQLSyntaxSupport[IssueSummary] {
+  override val columns = Seq("count", "sum")
+  def apply(is: ResultName[IssueSummary])(rs: WrappedResultSet) = new IssueSummary(rs.long(is.count), rs.long(is.sum))
+}
+
 class SQLInterpolationSpec extends FlatSpec with ShouldMatchers {
 
   import org.joda.time._
