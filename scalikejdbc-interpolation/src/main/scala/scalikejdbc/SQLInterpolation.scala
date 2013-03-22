@@ -82,7 +82,7 @@ object SQLInterpolation {
                     else defaultValue(s) // cannot retrieve the real default value because of Scala 2.10 reflection API limitation
                   } else {
                     if (expectedType <:< typeOf[Option[_]]) None
-                    else throw new IllegalStateException(s"'${fieldName}' not found in (${columns.mkString(",")}) and '${fieldName}' has no default value.")
+                    else throw new IllegalStateException(s"'${columnName}' not found in (${columns.mkString(",")}) and '${fieldName}' has no default value.")
                   }
                 } else {
                   val maybeFoundValue = extractValue(expectedType, rs, resultName.field(fieldName)).map {
