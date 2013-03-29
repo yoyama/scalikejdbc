@@ -4,13 +4,69 @@ import org.scalatest._
 import org.scalatest.matchers._
 import org.joda.time._
 import scalikejdbc.SQLInterpolation._
+import scala.reflect.runtime.universe._
 
-class HibernateSQLFormatter extends SQLFormatter {
-  private val formatter = new org.hibernate.engine.jdbc.internal.BasicFormatterImpl()
-  def format(sql: String) = formatter.format(sql)
+case class User(id: Int, name: Option[String], groupId: Option[Int] = None, group: Option[Group] = None)
+object User extends SQLSyntaxSupport[User] {
+  override val tableName = "users"
+  override val columns = Seq("id", "first_name", "group_id")
+  override val nameConverters = Map("name" -> "first_name")
+  override val delimiterForResultName = "_Z_"
+  override val forceUpperCase = true
+
+  def apply(u: ResultName[User], g: ResultName[Group])(rs: WrappedResultSet)(implicit t: TypeTag[User]): User = {
+    (apply(u)(rs)).copy(group = rs.intOpt(g.id).map(id => Group(g)(rs)))
+  }
+}
+
+case class Group(id: Int, websiteUrl: Option[String], members: Seq[User] = Nil)
+object Group extends SQLSyntaxSupport[Group] {
+  override val tableName = "groups"
+}
+
+case class GroupMember(userId: Int, groupId: Int)
+object GroupMember extends SQLSyntaxSupport[GroupMember] {
+  override val tableName = "group_members"
+}
+
+case class Customer(id: Int, name: String, groupId: Option[Int] = None, group: Option[CustomerGroup] = None, orders: Seq[Order] = Nil)
+object Customer extends SQLSyntaxSupport[Customer] {
+  override val tableName = "customers"
+  override val forceUpperCase = true
+}
+
+case class CustomerGroup(id: Int, name: String)
+object CustomerGroup extends SQLSyntaxSupport[CustomerGroup]
+
+case class Product(id: Int, name: String)
+object Product extends SQLSyntaxSupport[Product] {
+  override val tableName = "products"
+}
+
+case class Order(customerId: Int, productId: Int, orderedAt: DateTime)
+object Order extends SQLSyntaxSupport[Order] {
+  override val tableName = "orders"
+  override val columns = Seq("id", "customer_id", "product_id", "ordered_at")
+}
+
+case class Issue(id: Int, body: String, tags: Seq[Tag] = Vector())
+object Issue extends SQLSyntaxSupport[Issue]
+
+case class Tag(id: Int, name: String)
+object Tag extends SQLSyntaxSupport[Tag]
+
+object IssueTag extends SQLSyntaxSupport[Nothing]
+
+case class IssueSummary(count: Long, sum: Long)
+object IssueSummary extends SQLSyntaxSupport[IssueSummary] {
+  override val columns = Seq("count", "sum")
+  def apply(is: ResultName[IssueSummary])(rs: WrappedResultSet) = new IssueSummary(rs.long(is.count), rs.long(is.sum))
 }
 
 class SQLInterpolationSpec extends FlatSpec with ShouldMatchers {
+
+  import org.joda.time._
+  import scalikejdbc.SQLInterpolation._
 
   behavior of "SQLInterpolation"
 
@@ -22,7 +78,7 @@ class SQLInterpolationSpec extends FlatSpec with ShouldMatchers {
   val password = props.getProperty("password")
 
   Class.forName(driverClassName)
-  val poolSettings = new ConnectionPoolSettings(initialSize = 50, maxSize = 50)
+  val poolSettings = new ConnectionPoolSettings(initialSize = 50, maxSize = 50, validationQuery = null)
   ConnectionPool.singleton(url, user, password, poolSettings)
 
   GlobalSettings.sqlFormatter = SQLFormatterSettings("scalikejdbc.HibernateSQLFormatter")
@@ -34,38 +90,6 @@ class SQLInterpolationSpec extends FlatSpec with ShouldMatchers {
     SQLSyntaxProvider.toSnakeCase("wonderfulMyHTML") should equal("wonderful_my_html")
     SQLSyntaxProvider.toSnakeCase("wonderfulMyHTML", Map("My" -> "xxx")) should equal("wonderfulxxx_html")
   }
-
-  object User extends SQLSyntaxSupport[User] {
-
-    override val tableName = "users"
-    override val columns = Seq("id", "first_name", "group_id")
-    override val nameConverters = Map("uid" -> "id")
-    override val delimiterForResultName = "_Z_"
-    override val forceUpperCase = true
-
-    def apply(rs: WrappedResultSet, u: ResultName[User]): User = {
-      User(id = rs.int(u.id), firstName = rs.stringOpt(u.firstName), groupId = rs.intOpt(u.groupId))
-    }
-
-    def apply(rs: WrappedResultSet, u: ResultName[User], g: ResultName[Group]): User = {
-      apply(rs, u).copy(group = rs.intOpt(g.id).map(id => Group(id = id, websiteUrl = rs.stringOpt(g.websiteUrl))))
-    }
-  }
-
-  case class User(id: Int, firstName: Option[String], groupId: Option[Int] = None, group: Option[Group] = None)
-
-  object Group extends SQLSyntaxSupport[Group] {
-    override val tableName = "groups"
-    override val columns = Seq("id", "website_url")
-    def apply(rs: WrappedResultSet, g: ResultName[Group]): Group = Group(id = rs.int(g.id), websiteUrl = rs.stringOpt(g.field("websiteUrl")))
-  }
-  case class Group(id: Int, websiteUrl: Option[String], members: Seq[User] = Nil)
-
-  object GroupMember extends SQLSyntaxSupport[GroupMember] {
-    override val tableName = "group_members"
-    override val columns = Seq("user_id", "group_id")
-  }
-  case class GroupMember(userId: Int, groupId: Int)
 
   it should "be available with SQLSyntaxSupport" in {
     DB localTx {
@@ -96,10 +120,10 @@ class SQLInterpolationSpec extends FlatSpec with ShouldMatchers {
               ${User.as(u)} left join ${Group.as(g)} on ${u.groupId} = ${g.id}
             where 
               ${u.id} = 3
-          """.map(rs => User(rs, u.resultName, g.resultName)).single.apply().get
+          """.map(User(u.resultName, g.resultName)).single.apply().get
 
           user.id should equal(3)
-          user.firstName should equal(Some("baz"))
+          user.name should equal(Some("baz"))
           user.group.isDefined should equal(true)
 
           // exception patterns
@@ -109,8 +133,8 @@ class SQLInterpolationSpec extends FlatSpec with ShouldMatchers {
               sql"""select ${u.result.id}, ${u.result.dummy}
               from ${User.as(u)} inner join ${Group.as(g)} on ${u.groupId} = ${g.id}
               where ${u.id} = 3"""
-                .one(rs => User(rs, u.resultName))
-                .toOne(rs => Group(rs, g.resultName))
+                .one(User(u.resultName))
+                .toOne(Group(g.resultName))
                 .map { (u, g) => u.copy(group = Option(g)) }
                 .single.apply()
             }
@@ -120,7 +144,7 @@ class SQLInterpolationSpec extends FlatSpec with ShouldMatchers {
                 from ${User.as(u)} inner join ${Group.as(g)} on ${u.groupId} = ${g.id}
                 where ${u.id} = 3"""
                 .one(rs => rs.int(u.resultName.foo))
-                .toOne(rs => Group(rs, g.resultName))
+                .toOne(Group(g.resultName))
                 .map { (foo, g) => foo }
                 .list.apply()
             }
@@ -140,12 +164,12 @@ class SQLInterpolationSpec extends FlatSpec with ShouldMatchers {
             where
               ${g.id} = 1
           """.foldLeft(Option.empty[Group]) { (groupOpt, rs) =>
-              val newMember = User(rs, u.resultName)
+              val newMember = User(u.resultName)(rs)
               groupOpt.map { group =>
                 if (group.members.contains(newMember)) group
                 else group.copy(members = newMember.copy(groupId = Option(group.id), group = Option(group)) :: group.members.toList)
               }.orElse {
-                Some(Group(rs, g.resultName).copy(members = Seq(newMember)))
+                Some((Group(g.resultName)(rs)).copy(members = Seq(newMember)))
               }
             }
 
@@ -165,8 +189,8 @@ class SQLInterpolationSpec extends FlatSpec with ShouldMatchers {
                 inner join ${User.as(u)} on ${gm.userId} = ${u.id}
             order by ${g.id}, ${u.id}
             """
-              .one(rs => Group(rs, g.resultName))
-              .toMany(rs => Some(User(rs, u.resultName)))
+              .one(Group(g.resultName))
+              .toMany(rs => Some(User(u.resultName)(rs)))
               .map { (g, us) => g.copy(members = us) }
               .list.apply()
 
@@ -191,8 +215,8 @@ class SQLInterpolationSpec extends FlatSpec with ShouldMatchers {
                 inner join ${User.as(u)} on ${gm.userId} = ${u.id}
             order by ${g.id}, ${u.id}
             """
-              .one(rs => Group(rs, g.resultName))
-              .toMany(rs => Some(User(rs, u.resultName)))
+              .one(Group(g.resultName))
+              .toMany(rs => Some(User(u.resultName)(rs)))
               .map { (g, us) => g.copy(members = us) }
               .traversable.apply()
 
@@ -218,8 +242,8 @@ class SQLInterpolationSpec extends FlatSpec with ShouldMatchers {
             where ${g.id} = 1
             order by ${g.id}, ${u.id}
             """
-              .one(rs => Group(rs, g.resultName))
-              .toMany(rs => Some(User(rs, u.resultName)))
+              .one(Group(g.resultName))
+              .toMany(rs => Some(User(u.resultName)(rs)))
               .map { (g, us) => g.copy(members = us) }
               .single.apply()
 
@@ -239,7 +263,7 @@ class SQLInterpolationSpec extends FlatSpec with ShouldMatchers {
             ${userId.map(id => sqls"where ${u.id} = ${id}") getOrElse sqls""}
             order by ${u.id}
             """
-              .map(rs => User(rs, u.resultName))
+              .map(User(u.resultName))
               .list.apply()
 
             users.size should be(1)
@@ -256,7 +280,7 @@ class SQLInterpolationSpec extends FlatSpec with ShouldMatchers {
             ${userId.map(id => sqls"where ${u.id} = ${id}") getOrElse sqls""}
             order by ${u.id}
             """
-              .map(rs => User(rs, u.resultName))
+              .map(User(u.resultName))
               .list.apply()
 
             users.size should be(3)
@@ -271,30 +295,6 @@ class SQLInterpolationSpec extends FlatSpec with ShouldMatchers {
           sql"drop table group_members".execute.apply()
         }
     }
-  }
-
-  case class Issue(id: Int, body: String, tags: Seq[Tag] = Vector())
-  object Issue extends SQLSyntaxSupport[Issue] {
-    def apply(rs: WrappedResultSet, i: ResultName[Issue]): Issue = Issue(
-      id = rs.int(i.id),
-      body = rs.string(i.body)
-    )
-  }
-
-  case class Tag(id: Int, name: String)
-  object Tag extends SQLSyntaxSupport[Tag] {
-    def apply(rs: WrappedResultSet, t: ResultName[Tag]): Tag = Tag(
-      id = rs.int(t.id),
-      name = rs.string(t.name)
-    )
-  }
-
-  object IssueTag extends SQLSyntaxSupport[Nothing]
-
-  case class IssueSummary(count: Long, sum: Long)
-  object IssueSummary extends SQLSyntaxSupport[IssueSummary] {
-    override val columns = Seq("count", "sum")
-    def apply(is: ResultName[IssueSummary])(rs: WrappedResultSet) = new IssueSummary(rs.long(is.count), rs.long(is.sum))
   }
 
   it should "be available for empty relation" in {
@@ -347,9 +347,9 @@ class SQLInterpolationSpec extends FlatSpec with ShouldMatchers {
               where
                 ${i.id} = ${1}
             """
-              .one(rs => Issue(rs.int(i.resultName.id), rs.string(i.resultName.body)))
-              .toMany(rs => rs.intOpt(t.resultName.id).map(id => Tag(id, rs.string(t.resultName.name))))
-              .map { (i, ts) => i.copy(tags = i.tags ++ ts) }
+              .one(Issue(i.resultName))
+              .toMany(rs => rs.intOpt(t.resultName.id).map(_ => Tag(t.resultName)(rs)))
+              .map { (i, ts) => i.copy(tags = ts) }
               .single
               .apply()
 
@@ -374,32 +374,6 @@ class SQLInterpolationSpec extends FlatSpec with ShouldMatchers {
         }
     }
   }
-
-  object Customer extends SQLSyntaxSupport[Customer] {
-    override val tableName = "customers"
-    override val forceUpperCase = true
-
-    def apply(c: ResultName[Customer])(rs: WrappedResultSet): Customer = {
-      Customer(rs.int(c.id), rs.string(c.name))
-    }
-  }
-  case class Customer(id: Int, name: String, groupId: Option[Int] = None, group: Option[CustomerGroup] = None, orders: Seq[Order] = Nil)
-
-  object CustomerGroup extends SQLSyntaxSupport[CustomerGroup] {
-    override val tableName = "customer_group"
-  }
-  case class CustomerGroup(id: Int, name: String)
-
-  object Product extends SQLSyntaxSupport[Product] {
-    override val tableName = "products"
-  }
-  case class Product(id: Int, name: String)
-
-  object Order extends SQLSyntaxSupport[Order] {
-    override val tableName = "orders"
-    override val columns = Seq("id", "customer_id", "product_id", "ordered_at")
-  }
-  case class Order(customerId: Int, productId: Int, orderedAt: DateTime)
 
   it should "be available for sub-queries with SQLSyntaxSupport" in {
     try {
@@ -448,7 +422,7 @@ class SQLInterpolationSpec extends FlatSpec with ShouldMatchers {
             order by ${sq(c).id}
           """
               .one(Customer(sq(c).resultName))
-              .toOptionalOne(rs => rs.intOpt(cg.resultName.id).map(id => CustomerGroup(id, rs.string(cg.resultName.name))))
+              .toOptionalOne(rs => rs.intOpt(cg.resultName.id).map(id => CustomerGroup(cg.resultName)(rs)))
               .map { (c, cg) => c.copy(group = Some(cg)) }
               .list
               .apply()
@@ -472,8 +446,8 @@ class SQLInterpolationSpec extends FlatSpec with ShouldMatchers {
               ${sq(c).id} > 3
             order by ${sq(c).id}
           """
-              .one(rs => Customer(rs.int(sq(c).resultName.id), rs.string(sq(c).resultName.name)))
-              .toOptionalOne(rs => rs.intOpt(cg.resultName.id).map(id => CustomerGroup(id, rs.string(cg.resultName.name))))
+              .one(Customer(sq(c).resultName))
+              .toOptionalOne(rs => rs.intOpt(cg.resultName.id).map(id => CustomerGroup(cg.resultName)(rs)))
               .map { (c, cg) => c.copy(group = Some(cg)) }
               .traversable
               .apply()
@@ -496,8 +470,8 @@ class SQLInterpolationSpec extends FlatSpec with ShouldMatchers {
             where
               ${sq(c).id} = 4
           """
-              .one(rs => Customer(rs.int(sq(c).resultName.id), rs.string(sq(c).resultName.name)))
-              .toOptionalOne(rs => rs.intOpt(cg.resultName.id).map(id => CustomerGroup(id, rs.string(cg.resultName.name))))
+              .one(Customer(sq(c).resultName))
+              .toOptionalOne(rs => rs.intOpt(cg.resultName.id).map(id => CustomerGroup(cg.resultName)(rs)))
               .map { (c, cg) => c.copy(group = Some(cg)) }
               .single
               .apply()
@@ -516,7 +490,7 @@ class SQLInterpolationSpec extends FlatSpec with ShouldMatchers {
               where
                ${c.id} in (select ${o.result.customerId} from ${Order.as(o)})
             """
-              .map(rs => Customer(rs.int(c.resultName.id), rs.string(c.resultName.name))).list.apply()
+              .map(Customer(c.resultName)).list.apply()
 
             customers.size should equal(3)
           }
@@ -539,8 +513,8 @@ class SQLInterpolationSpec extends FlatSpec with ShouldMatchers {
                 on ${c.id} = ${x(o).customerId}
               order by ${c.id}
             """
-              .one(rs => Customer(rs.int(c.resultName.id), rs.string(c.resultName.name)))
-              .toMany(rs => Some(Order(rs.int(x(o).resultName.customerId), rs.int(x(o).resultName.productId), rs.timestamp(x(o).resultName.orderedAt).toDateTime)))
+              .one(Customer(c.resultName))
+              .toMany(rs => Some(Order(x(o).resultName)(rs)))
               .map { (c, os) => c.copy(orders = os) }.list.apply()
 
             customers.size should equal(3)

@@ -22,12 +22,12 @@ object ScalikeJDBCProjects extends Build {
       resolvers ++= _resolvers,
       libraryDependencies <++= (scalaVersion) { scalaVersion =>
         val scalatest = "scalatest_" + (scalaVersion match {
-          case "2.10.1" | "2.10.0" => "2.10.0"
+          case "2.10.2-SNAPSHOT" | "2.10.1" | "2.10.0" => "2.10.0"
           case "2.9.3" => "2.9.2"
           case version => version
         })
         val anorm = "anorm_" + (scalaVersion match {
-          case "2.10.1" | "2.10.0" => "2.10"
+          case "2.10.2-SNAPSHOT" | "2.10.1" | "2.10.0" => "2.10"
           case "2.9.3" => "2.9.2"
           case version => version
         })
@@ -117,15 +117,15 @@ object ScalikeJDBCProjects extends Build {
       organization := _organization,
       name := "scalikejdbc-interpolation",
       version := _version,
-      scalaVersion := "2.10.1",
-      scalaBinaryVersion := "2.10",
+      crossScalaVersions := Seq("2.10.1"),
       resolvers ++= _resolvers,
       libraryDependencies <++= (scalaVersion) { scalaVersion =>
         Seq(
-          "org.slf4j"      %  "slf4j-api"        % "1.7.4"       % "compile",
-          "ch.qos.logback" %  "logback-classic"  % "1.0.10"       % "test",
+          "org.scala-lang" %  "scala-reflect"    % scalaVersion  % "compile",
+          "org.slf4j"      %  "slf4j-api"        % "1.7.2"       % "compile",
+          "ch.qos.logback" %  "logback-classic"  % "1.0.11"      % "test",
           "org.hibernate"  %  "hibernate-core"   % "4.1.9.Final" % "test",
-          "org.scalatest"  %% "scalatest"        % "[1.8,)"      % "test"
+          "org.scalatest"  %  "scalatest_2.10.0" % "[1.8,)"      % "test"
         ) ++ jdbcDriverDependenciesInTestScope
       },
       publishTo <<= version { (v: String) => _publishTo(v) },
@@ -149,8 +149,8 @@ object ScalikeJDBCProjects extends Build {
       resolvers ++= _resolvers,
       libraryDependencies <++= (scalaVersion) { scalaVersion =>
         (scalaVersion match {
-          case "2.10.1" | "2.10.0" => Seq(
-            "org.slf4j"     %  "slf4j-simple" % "1.7.4"   % "compile",
+          case "2.10.2-SNAPSHOT" | "2.10.1" | "2.10.0" => Seq(
+            "org.slf4j"     %  "slf4j-simple" % "1.7.2"   % "compile",
             "org.scalatest" %% "scalatest"    % "[1.8,)"  % "test",
             "org.specs2"    %% "specs2"       % "[1.13,)" % "test"
            )
@@ -183,11 +183,11 @@ object ScalikeJDBCProjects extends Build {
       organization := _organization,
       name := "scalikejdbc-play-plugin",
       version := _version,
-      crossScalaVersions := Seq("2.10.0", "2.9.1"),
+      crossScalaVersions := Seq("2.10.1", "2.9.1"),
       resolvers ++= _resolvers,
       libraryDependencies <++= (scalaVersion) { scalaVersion =>
         scalaVersion match {
-          case "2.10.1" | "2.10.0" => {
+          case "2.10.2-SNAPSHOT" | "2.10.1" | "2.10.0" => {
             val playVersion = "2.1.0"
             Seq(
               "play" % "play_2.10" % playVersion % "provided",
@@ -229,7 +229,7 @@ object ScalikeJDBCProjects extends Build {
           "org.scalatest"  %% "scalatest"            % "[1.8,)"  % "provided",
           "ch.qos.logback" %  "logback-classic"      % "1.0.10"  % "test"
         ) ++ (scalaVersion match {
-          case "2.10.1" | "2.10.0" => Seq("org.specs2" %% "specs2"       % "[1.13,)" % "provided")
+          case "2.10.2-SNAPSHOT" | "2.10.1" | "2.10.0" => Seq("org.specs2" %% "specs2" % "[1.13,)" % "provided")
           case "2.9.3"  => Seq("org.specs2" %  "specs2_2.9.2" % "[1.12,)" % "provided")
           case _ => Seq("org.specs2" %% "specs2" % "[1.12,)"  % "provided")
         }) ++ jdbcDriverDependenciesInTestScope
@@ -279,7 +279,7 @@ object ScalikeJDBCProjects extends Build {
     )
   ) dependsOn(scalikejdbc)
 
-  val _crossScalaVersions = Seq("2.10.0", "2.9.3", "2.9.2", "2.9.1")
+  val _crossScalaVersions = Seq("2.10.1", "2.9.3", "2.9.2", "2.9.1")
   def _publishTo(v: String) = {
     val nexus = "https://oss.sonatype.org/"
     if (v.trim.endsWith("SNAPSHOT")) Some("snapshots" at nexus + "content/repositories/snapshots")

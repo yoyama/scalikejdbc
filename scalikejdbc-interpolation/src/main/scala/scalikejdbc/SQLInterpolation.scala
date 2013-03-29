@@ -2,18 +2,23 @@ package scalikejdbc
 
 import scala.language.implicitConversions
 import scala.language.reflectiveCalls
-import scala.language.experimental.macros
 import scala.language.dynamics
+import org.joda.time._
 
 /**
  * SQLInterpolation companion object
  */
 object SQLInterpolation {
 
+  import scala.reflect.runtime.universe._
+  import scala.reflect._
+
   @inline implicit def scalikejdbcSQLInterpolationImplicitDef(s: StringContext) = new scalikejdbc.SQLInterpolationString(s)
   @inline implicit def scalikejdbcSQLSyntaxToStringImplicitDef(syntax: scalikejdbc.interpolation.SQLSyntax): String = syntax.value
 
   private[scalikejdbc] val SQLSyntaxSupportLoadedColumns = new scala.collection.concurrent.TrieMap[String, Seq[String]]()
+
+  type TypeConverter = PartialFunction[(String, Any), Any]
 
   /**
    * SQLSyntax support utilities
@@ -31,7 +36,11 @@ object SQLInterpolation {
     def forceUpperCase: Boolean = false
     def useShortenedResultName: Boolean = true
     def delimiterForResultName = if (forceUpperCase) "_ON_" else "_on_"
+
     def nameConverters: Map[String, String] = Map()
+
+    def typeConverter: TypeConverter = asIsConverter
+    private[this] def asIsConverter: TypeConverter = { case (_, v) => v }
 
     def syntax = {
       val _name = if (forceUpperCase) tableName.toUpperCase else tableName
@@ -46,6 +55,88 @@ object SQLInterpolation {
       if (tableName == provider.tableAliasName) { SQLSyntax(tableName) }
       else { SQLSyntax(tableName + " " + provider.tableAliasName) }
     }
+
+    def apply(resultName: ResultName[A])(rs: WrappedResultSet)(implicit typeTag: TypeTag[A]): A = {
+      val entityType = typeTag.tpe
+      entityType.declarations.collectFirst {
+        case m: MethodSymbol if m.isPrimaryConstructor => m
+      }.map { const =>
+        val classMirror = typeTag.mirror.reflectClass(entityType.typeSymbol.asClass)
+        val constructorMirror = classMirror.reflectConstructor(const)
+        try {
+          constructorMirror.apply(const.paramss.map { symbols: List[Symbol] =>
+            symbols.zipWithIndex.map {
+              case (s: Symbol, i: Int) =>
+                val expectedType = s.typeSignature
+                val fieldName = s.name.encoded.trim
+                val columnName = SQLSyntaxProvider.toSnakeCase(fieldName, nameConverters)
+
+                if (!columns.contains(columnName)) {
+                  if (s.asTerm.isParamWithDefault) {
+                    if (expectedType <:< typeOf[Option[_]]) None
+                    else defaultValue(s) // cannot retrieve the real default value because of Scala 2.10 reflection API limitation
+                  } else {
+                    if (expectedType <:< typeOf[Option[_]]) None
+                    else throw new IllegalStateException(s"'${columnName}' not found in (${columns.mkString(",")}) and '${fieldName}' has no default value.")
+                  }
+                } else {
+                  val maybeFoundValue = extractValue(expectedType, rs, resultName.field(fieldName)).map {
+                    v => typeConverter.orElse(asIsConverter).apply((fieldName, v))
+                  }
+                  if (expectedType <:< typeOf[Option[_]]) maybeFoundValue else maybeFoundValue.getOrElse(null)
+                }
+            }
+          }.flatten: _*).asInstanceOf[A]
+        } catch {
+          case e: IllegalArgumentException =>
+            throw new IllegalStateException(s"Failed to instantiate [${entityType}]. (Reason: ${e.getMessage})", e)
+        }
+      }.getOrElse {
+        throw new IllegalStateException(s"No primary constructor found for ${entityType}.")
+      }
+    }
+
+    private[this] def defaultValue(p: Symbol): Any = p.typeSignature match {
+      case t if t =:= typeOf[Boolean] => false
+      case t if t =:= typeOf[Byte] => 0
+      case t if t =:= typeOf[Int] => 0
+      case t if t =:= typeOf[Double] => 0.0D
+      case t if t =:= typeOf[Float] => 0.0F
+      case t if t =:= typeOf[Long] => 0L
+      case t if t =:= typeOf[Short] => 0
+      case _ => null
+    }
+
+    private[this] def extractValue(expectedType: Type, rs: WrappedResultSet, label: String): Option[_] = expectedType match {
+      case t if t =:= typeOf[Int] || t =:= typeOf[Option[Int]] => rs.intOpt(label)
+      case t if t =:= typeOf[Long] || t =:= typeOf[Option[Long]] => rs.longOpt(label)
+      case t if t =:= typeOf[String] || t =:= typeOf[Option[String]] => rs.stringOpt(label)
+      case t if t =:= typeOf[Boolean] || t =:= typeOf[Option[Boolean]] => rs.booleanOpt(label)
+      case t if t =:= typeOf[DateTime] || t =:= typeOf[Option[DateTime]] => rs.timestampOpt(label).map(_.toDateTime)
+      case t if t =:= typeOf[LocalDate] || t =:= typeOf[Option[LocalDate]] => rs.timestampOpt(label).map(_.toLocalDate)
+      case t if t =:= typeOf[LocalDateTime] || t =:= typeOf[Option[LocalDateTime]] => rs.timestampOpt(label).map(_.toLocalDateTime)
+      case t if t =:= typeOf[LocalTime] || t =:= typeOf[Option[LocalTime]] => rs.timestampOpt(label).map(_.toLocalTime)
+      case t if t =:= typeOf[java.util.Date] || t =:= typeOf[Option[java.util.Date]] => rs.timestampOpt(label).map(_.toJavaUtilDate)
+      case t if t =:= typeOf[BigDecimal] || t =:= typeOf[Option[BigDecimal]] => rs.bigDecimalOpt(label)
+      case t if t =:= typeOf[Double] || t =:= typeOf[Option[Double]] => rs.doubleOpt(label)
+      case t if t =:= typeOf[Float] || t =:= typeOf[Option[Float]] => rs.floatOpt(label)
+      case t if t =:= typeOf[Short] || t =:= typeOf[Option[Short]] => rs.shortOpt(label)
+      case t if t =:= typeOf[Byte] || t =:= typeOf[Option[Byte]] => rs.byteOpt(label)
+      case t if t =:= typeOf[java.sql.Array] || t =:= typeOf[Option[java.sql.Array]] => rs.arrayOpt(label)
+      case t if t =:= typeOf[java.sql.Blob] || t =:= typeOf[Option[java.sql.Blob]] => rs.blobOpt(label)
+      case t if t =:= typeOf[java.sql.Clob] || t =:= typeOf[Option[java.sql.Clob]] => rs.clobOpt(label)
+      case t if t =:= typeOf[java.sql.Date] || t =:= typeOf[Option[java.sql.Date]] => rs.dateOpt(label)
+      case t if t =:= typeOf[java.sql.NClob] || t =:= typeOf[Option[java.sql.NClob]] => rs.nClobOpt(label)
+      case t if t =:= typeOf[java.sql.Ref] || t =:= typeOf[Option[java.sql.Ref]] => rs.refOpt(label)
+      case t if t =:= typeOf[java.sql.SQLXML] || t =:= typeOf[Option[java.sql.SQLXML]] => rs.sqlXmlOpt(label)
+      case t if t =:= typeOf[java.sql.Time] || t =:= typeOf[Option[java.sql.Time]] => rs.timeOpt(label)
+      case t if t =:= typeOf[java.sql.Timestamp] || t =:= typeOf[Option[java.sql.Timestamp]] => rs.timestampOpt(label)
+      case t if t =:= typeOf[java.io.InputStream] || t =:= typeOf[Option[java.io.InputStream]] => rs.binaryStreamOpt(label)
+      case t if t =:= typeOf[java.net.URL] || t =:= typeOf[Option[java.net.URL]] => rs.urlOpt(label)
+      case t if t =:= typeOf[Array[Byte]] || t =:= typeOf[Option[Array[Byte]]] => rs.bytesOpt(label)
+      case _ => Option(rs.any(label))
+    }
+
   }
 
   /**
@@ -53,6 +144,7 @@ object SQLInterpolation {
    */
   trait SQLSyntaxProvider[A] extends Dynamic {
     import SQLSyntaxProvider._
+    import scala.language.experimental.macros
     import scala.reflect.runtime.universe._
 
     def c(name: String) = column(name)
