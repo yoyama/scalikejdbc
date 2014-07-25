@@ -204,12 +204,17 @@ object SQLSyntax {
   // https://github.com/scalikejdbc/scalikejdbc/issues/116
   private[scalikejdbc] def apply(value: String, parameters: Seq[Any] = Nil) = new SQLSyntax(value, parameters)
 
+  def unapply(syntax: SQLSyntax): Option[(String, Seq[Any])] = Some((syntax.value, syntax.parameters))
+
   /**
    * WARNING: Be aware of SQL injection vulnerability.
    */
   def createUnsafely(value: String, parameters: Seq[Any] = Nil): SQLSyntax = apply(value, parameters)
 
-  def unapply(syntax: SQLSyntax): Option[(String, Seq[Any])] = Some((syntax.value, syntax.parameters))
+  /**
+   * Returns optional SQLSyntax that will be skipped when absent(= None).
+   */
+  def skipIfAbsent(optionalSyntax: Option[SQLSyntax]): OptionalSQLSyntax = OptionalSQLSyntax(optionalSyntax)
 
   import Implicits._
 
@@ -303,7 +308,7 @@ object SQLSyntax {
   def dual = sqls"dual"
 
   /**
-   * Rerturns an optional SQLSyntax which is flatten (from option array) and joined with 'and'.
+   * Returns an optional SQLSyntax which is flatten (from option array) and joined with 'and'.
    *
    * {{{
    *   val cond: Option[SQLSyntax] = SQLSyntax.toAndConditionOpt(Some(sqls"id = $id"), None, Some(sqls"name = $name"))
@@ -317,7 +322,7 @@ object SQLSyntax {
   }
 
   /**
-   * Rerturns an optional SQLSyntax which is flatten (from option array) and joined with 'or'.
+   * Returns an optional SQLSyntax which is flatten (from option array) and joined with 'or'.
    *
    * {{{
    *   val cond: Option[SQLSyntax] = SQLSyntax.toOrConditionOpt(Some(sqls"id = $id"), None, Some(sqls"name = $name"))

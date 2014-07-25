@@ -248,4 +248,37 @@ class SQLInterpolationSpec extends FlatSpec with Matchers with LogSupport with L
     }
   }
 
+  it should "accept Option[SQLSyntax]" in {
+    DB localTx {
+      implicit s =>
+        try {
+          sql"""create table optional_sqlsyntax (id int, name varchar(256))""".execute.apply()
+          Seq((1, "foo"), (2, "bar"), (3, "baz")) foreach {
+            case (id, name) => sql"""insert into optional_sqlsyntax values (${id}, ${name})""".update.apply()
+          }
+
+          val columns: Seq[SQLSyntax] = Seq("id", "name").map(SQLSyntax.createUnsafely(_, Nil))
+          val values: Seq[SQLSyntax] = Seq(Seq(1, "foo"), Seq(2, "bar"), Seq(3, "bazzzz")).map { xs => sqls"($xs)" }
+
+          {
+            val optional: OptionalSQLSyntax = SQLSyntax.skipIfAbsent(Some(sqls"where ${columns} in (${values})"))
+            val sql = sql"select count(1) from optional_sqlsyntax ${optional}"
+            sql.statement should equal("select count(1) from optional_sqlsyntax where id, name in ((?, ?), (?, ?), (?, ?))")
+            sql.parameters should equal(Seq(1, "foo", 2, "bar", 3, "bazzzz"))
+          }
+
+          // OptionalSQLSyntax will be skipped when oNone
+          {
+            val maybeSyntax: Option[SQLSyntax] = None.map(_ => sqls" where ${columns} in (${values}")
+            val optional: OptionalSQLSyntax = SQLSyntax.skipIfAbsent(maybeSyntax)
+            val sql = sql"select count(1) from optional_sqlsyntax ${optional}"
+            sql.statement should equal("select count(1) from optional_sqlsyntax ")
+            sql.parameters should equal(Nil)
+          }
+
+        } finally {
+          sql"""drop table optional_sqlsyntax""".execute.apply()
+        }
+    }
+  }
 }

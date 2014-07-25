@@ -15,6 +15,8 @@
  */
 package scalikejdbc
 
+import scalikejdbc.interpolation.OptionalSQLSyntax
+
 private[scalikejdbc] object LastParameter
 
 /**
@@ -40,6 +42,8 @@ class SQLInterpolationString(val s: StringContext) extends AnyVal {
 
   private def addPlaceholders(sb: StringBuilder, param: Any): StringBuilder = param match {
     case _: String => sb += '?'
+    // to accept sqls" ${idOpt.map(id => sqls"id = ${id}").ifExists}"
+    case opt: OptionalSQLSyntax => opt.underlying.map(u => sb ++= u.value).getOrElse(sb)
     // to fix issue #215 due to unexpected Stream#addString behavior
     case s: Stream[_] => addPlaceholders(sb, s.toList) // e.g. in clause
     case t: Traversable[_] => t.map {
@@ -53,6 +57,8 @@ class SQLInterpolationString(val s: StringContext) extends AnyVal {
 
   private def buildParams(params: Seq[Any]): Seq[Any] = params.foldLeft(Seq.newBuilder[Any]) {
     case (b, s: String) => b += s
+    // to accept sqls" ${idOpt.map(id => sqls"id = ${id}").ifExists}"
+    case (b, opt: OptionalSQLSyntax) => opt.underlying.map(u => b ++= u.parameters).getOrElse(b)
     case (b, t: Traversable[_]) => t.foldLeft(b) {
       case (b, SQLSyntax(_, params)) => b ++= params
       case (b, e) => b += e
