@@ -327,7 +327,8 @@ object ScalikeJDBCProjects extends Build {
   val _resolvers = Seq(
     "typesafe repo" at "http://repo.typesafe.com/typesafe/releases",
     "sonatype releases" at "https://oss.sonatype.org/content/repositories/releases",
-    "sonatype snaphots" at "https://oss.sonatype.org/content/repositories/snapshots"
+    "sonatype snaphots" at "https://oss.sonatype.org/content/repositories/snapshots",
+    "scala-2.11.4-staging" at "https://oss.sonatype.org/content/repositories/orgscala-lang-1132"
   )
   lazy val scalaTestDependenciesInTestScope =
     Seq("org.scalatest" %% "scalatest" % _scalatestVersion % "test")
