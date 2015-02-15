@@ -57,6 +57,7 @@ class CodeGenerator(table: Table, specifiedClassName: Option[String] = None)(imp
     val Ref = "Ref"
     val Struct = "Struct"
     val BigDecimal = "BigDecimal" // scala.math.BigDecimal
+    val SqlXml = "java.sql.SQLXML"
   }
 
   case class IndentGenerator(i: Int) {
@@ -103,6 +104,7 @@ class CodeGenerator(table: Table, specifiedClassName: Option[String] = None)(imp
       case JavaSqlTypes.TINYINT => TypeName.Byte
       case JavaSqlTypes.VARBINARY => TypeName.ByteArray
       case JavaSqlTypes.VARCHAR => TypeName.String
+      case JavaSqlTypes.SQLXML => TypeName.SqlXml
       case _ => TypeName.Any
     }
 
@@ -142,6 +144,7 @@ class CodeGenerator(table: Table, specifiedClassName: Option[String] = None)(imp
       case JavaSqlTypes.TINYINT => "1"
       case JavaSqlTypes.VARBINARY => "null"
       case JavaSqlTypes.VARCHAR => "'abc'"
+      case JavaSqlTypes.SQLXML => "null"
       case _ => "null"
     }
 
