@@ -92,8 +92,66 @@ object ScalikeJDBCProjects extends Build {
       exclude[MissingMethodProblem]("scalikejdbc.SQLUpdateWithGeneratedKey.this"),
       exclude[MissingMethodProblem]("scalikejdbc.SQLUpdate.this"),
       // since 2.2.3
-      exclude[MissingMethodProblem]("scalikejdbc.QueryDSLFeature#ConditionSQLBuilder.notBetween")
-    )
+      exclude[MissingMethodProblem]("scalikejdbc.QueryDSLFeature#ConditionSQLBuilder.notBetween"),
+      // since 2.2.4
+      exclude[MissingMethodProblem]("scalikejdbc.mapper.GeneratorConfig.toString"),
+      exclude[MissingMethodProblem]("scalikejdbc.mapper.CodeGenerator.scalikejdbc$mapper$CodeGenerator$$toClassName"),
+      exclude[IncompatibleMethTypeProblem]("scalikejdbc.SQLToOptionImpl.this"),
+      exclude[IncompatibleResultTypeProblem]("scalikejdbc.SQLToListImpl.apply"),
+      exclude[IncompatibleResultTypeProblem]("scalikejdbc.SQLToOptionImpl.<init>$default$4"),
+      exclude[IncompatibleResultTypeProblem]("scalikejdbc.SQLToOptionImpl.apply"),
+      exclude[IncompatibleResultTypeProblem]("scalikejdbc.SQLToTraversableImpl.apply"),
+      exclude[MissingClassProblem]("scalikejdbc.createNameBindingSQL"),
+      exclude[MissingClassProblem]("scalikejdbc.createNameBindingSQL$"),
+      exclude[MissingClassProblem]("scalikejdbc.createSQL"),
+      exclude[MissingClassProblem]("scalikejdbc.createSQL$"),
+      exclude[MissingClassProblem]("scalikejdbc.OneToManySQL$"),
+      exclude[MissingClassProblem]("scalikejdbc.OneToOneSQL$"),
+      exclude[MissingClassProblem]("scalikejdbc.OutputDecisions"),
+      exclude[MissingClassProblem]("scalikejdbc.SQLToListImpl$"),
+      exclude[MissingClassProblem]("scalikejdbc.SQLToTraversableImpl$"),
+      exclude[MissingMethodProblem]("scalikejdbc.AllOutputDecisionsUnsupported.collection"),
+      exclude[MissingMethodProblem]("scalikejdbc.AllOutputDecisionsUnsupported.toCollection"),
+      exclude[MissingMethodProblem]("scalikejdbc.DBSession.collection"),
+      exclude[MissingMethodProblem]("scalikejdbc.OneToManySQL.this"),
+      exclude[MissingMethodProblem]("scalikejdbc.OneToManySQLToOption.output"),
+      exclude[MissingMethodProblem]("scalikejdbc.OneToManySQLToOption.this"),
+      exclude[MissingMethodProblem]("scalikejdbc.OneToOneSQL.this"),
+      exclude[MissingMethodProblem]("scalikejdbc.OneToOneSQLToOption.output"),
+      exclude[MissingMethodProblem]("scalikejdbc.OneToOneSQLToOption.this"),
+      exclude[MissingMethodProblem]("scalikejdbc.OneToXSQL.<init>$default$3"),
+      exclude[MissingMethodProblem]("scalikejdbc.OneToXSQL.this"),
+      exclude[MissingMethodProblem]("scalikejdbc.SQL.<init>$default$4"),
+      exclude[MissingMethodProblem]("scalikejdbc.SQL.this"),
+      exclude[MissingMethodProblem]("scalikejdbc.SQLToList.apply"),
+      exclude[MissingMethodProblem]("scalikejdbc.SQLToList.result"),
+      exclude[MissingMethodProblem]("scalikejdbc.SQLToListImpl.this"),
+      exclude[MissingMethodProblem]("scalikejdbc.SQLToOption.apply"),
+      exclude[MissingMethodProblem]("scalikejdbc.SQLToOption.isSingle"),
+      exclude[MissingMethodProblem]("scalikejdbc.SQLToOption.output"),
+      exclude[MissingMethodProblem]("scalikejdbc.SQLToOption.result"),
+      exclude[MissingMethodProblem]("scalikejdbc.SQLToOptionImpl.output"),
+      exclude[MissingMethodProblem]("scalikejdbc.SQLToTraversable.apply"),
+      exclude[MissingMethodProblem]("scalikejdbc.SQLToTraversable.result"),
+      exclude[MissingMethodProblem]("scalikejdbc.SQLToTraversableImpl.this"),
+      exclude[MissingTypesProblem]("scalikejdbc.OneToManies2SQLToList"),
+      exclude[MissingTypesProblem]("scalikejdbc.SQLToListImpl"),
+      exclude[MissingTypesProblem]("scalikejdbc.SQLToOptionImpl"),
+      exclude[MissingTypesProblem]("scalikejdbc.SQLToTraversableImpl"),
+      exclude[UpdateForwarderBodyProblem]("scalikejdbc.SQLToList.apply$default$2"),
+      exclude[UpdateForwarderBodyProblem]("scalikejdbc.SQLToOption.apply$default$2"),
+      exclude[UpdateForwarderBodyProblem]("scalikejdbc.SQLToTraversable.apply$default$2")
+    ) ++ (for{
+      clazz <- Seq("OneToManies2SQLToList", "SQLToListImpl", "SQLToOptionImpl", "SQLToTraversableImpl")
+      method <- Seq("first", "headOption", "list", "single", "toList", "toOption", "toTraversable", "traversable")
+    } yield {
+      exclude[IncompatibleResultTypeProblem]("scalikejdbc." + clazz + "." + method)
+    }) ++ (2 to 9).flatMap{ n => Seq(
+      exclude[MissingClassProblem]("scalikejdbc.OneToManies" + n + "SQL$"),
+      exclude[MissingMethodProblem]("scalikejdbc.OneToManies" + n + "SQL.this"),
+      exclude[MissingMethodProblem]("scalikejdbc.OneToManies" + n + "SQLToOption.output"),
+      exclude[MissingMethodProblem]("scalikejdbc.OneToManies" + n + "SQLToOption.this")
+    )}
   }
 
   val mimaSettings = MimaPlugin.mimaDefaultSettings ++ Seq(
@@ -172,6 +230,14 @@ object ScalikeJDBCProjects extends Build {
         val diff = "git diff".!!
         if(diff.nonEmpty){
           sys.error("Working directory is dirty!\n" + diff)
+        }
+      },
+      (sourceGenerators in Compile) += task[Seq[File]]{
+        val dir = (sourceManaged in Compile).value
+        (3 to 9).map{ n =>
+          val file = dir / "scalikejdbc" / s"OneToManies${n}SQL.scala"
+          IO.write(file, GenerateOneToManies(n))
+          file
         }
       },
       libraryDependencies <++= (scalaVersion) { scalaVersion =>
@@ -269,6 +335,7 @@ object ScalikeJDBCProjects extends Build {
       ),
       ScriptedPlugin.scriptedLaunchOpts ++= Seq(
         "-Dplugin.version=" + version.value,
+        "-Dslf4j.version=" + _slf4jApiVersion,
         "-Dmysql.version=5.1.33",
         "-Dpostgresql.version=9.3-1102-jdbc41",
         "-Dh2.version=1.4.181",

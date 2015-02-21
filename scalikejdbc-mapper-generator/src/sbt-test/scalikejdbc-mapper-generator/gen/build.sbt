@@ -19,7 +19,7 @@ TaskKey[Unit]("createTestDatabase") := {
   Class.forName(setting.driver)
   ConnectionPool.singleton(setting.url, setting.username, setting.password)
   DB.autoCommit { implicit s =>
-    sql"create table programmers (id SERIAL PRIMARY KEY, name varchar(128), t1 timestamp not null, t2 date, t3 time)"
+    sql"create table if not exists programmers (id SERIAL PRIMARY KEY, name varchar(128), t1 timestamp not null, t2 date, t3 time)"
       .execute.apply()
   }
 }
@@ -42,6 +42,7 @@ libraryDependencies ++= Seq(
   "org.scalikejdbc"     %% "scalikejdbc-test"                 % scalikejdbcVersion % "test",
   "org.scalikejdbc"     %% "scalikejdbc-syntax-support-macro" % scalikejdbcVersion,
   "org.scalikejdbc"     %% "scalikejdbc-jsr310"               % scalikejdbcVersion,
+  "org.slf4j"           %  "slf4j-simple"                     % System.getProperty("slf4j.version"),
   "com.h2database"      %  "h2"                               % System.getProperty("h2.version"),
   "mysql"               %  "mysql-connector-java"             % System.getProperty("mysql.version"),
   "org.postgresql"      %  "postgresql"                       % System.getProperty("postgresql.version"),
